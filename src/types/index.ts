@@ -9,8 +9,6 @@ export interface Customer {
   id?: string;
   name: string;
   mobileNumber: string;
-  whatsappNumber?: string;
-  email?: string;
   gstNumber?: string;
   createdAt: Date | any; // allow firestore timestamp
 }
@@ -72,7 +70,6 @@ export interface Order {
   
   // Shipping Details
   courierCompany?: string;
-  trackingId?: string;
   shippingDate?: Date | any;
   expectedDeliveryDate?: Date | any;
   deliveredDate?: Date | any;

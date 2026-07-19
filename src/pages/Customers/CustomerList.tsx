@@ -53,7 +53,7 @@ export const CustomerList: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3">Customer Name</th>
                   <th className="px-4 py-3">Contact</th>
-                  <th className="px-4 py-3">Email / GST</th>
+                  <th className="px-4 py-3">GST Number</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -74,16 +74,9 @@ export const CustomerList: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div>{customer.mobileNumber}</div>
-                      {customer.whatsappNumber && (
-                        <div className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
-                          <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
-                          WhatsApp
-                        </div>
-                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-gray-500 dark:text-gray-400">{customer.email || '-'}</div>
-                      {customer.gstNumber && <div className="text-xs font-mono mt-1">GST: {customer.gstNumber}</div>}
+                      {customer.gstNumber ? <div className="text-sm font-mono">{customer.gstNumber}</div> : <div className="text-gray-500 dark:text-gray-400">-</div>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
