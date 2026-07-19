@@ -13,6 +13,10 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "dummy_app_id"
 };
 
+console.log("Firebase Debug - Raw Key:", import.meta.env.VITE_FIREBASE_API_KEY);
+console.log("Firebase Debug - Config Key length:", firebaseConfig.apiKey.length);
+console.log("Firebase Debug - Config Key starts with:", firebaseConfig.apiKey.substring(0, 5));
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
