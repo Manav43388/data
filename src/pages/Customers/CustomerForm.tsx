@@ -13,7 +13,6 @@ const customerSchema = z.object({
   name: z.string().min(1, 'Customer name is required'),
   mobileNumber: z.string().regex(/^[0-9+\s-]{10,15}$/, 'Valid mobile number is required'),
   address: z.string().optional(),
-  gstNumber: z.string().optional(),
 });
 
 type CustomerFormData = z.infer<typeof customerSchema>;
@@ -85,11 +84,6 @@ export const CustomerForm: React.FC = () => {
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Address (Optional)</label>
                 <Input placeholder="e.g. 123 Main St, Mumbai" {...register('address')} />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">GST Number (Optional)</label>
-                <Input placeholder="e.g. 22AAAAA0000A1Z5" {...register('gstNumber')} />
               </div>
             </div>
 

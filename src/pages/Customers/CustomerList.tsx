@@ -53,7 +53,7 @@ export const CustomerList: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3">Customer Name</th>
                   <th className="px-4 py-3">Contact</th>
-                  <th className="px-4 py-3">GST Number</th>
+                  <th className="px-4 py-3">Address</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -76,7 +76,7 @@ export const CustomerList: React.FC = () => {
                       <div>{customer.mobileNumber}</div>
                     </td>
                     <td className="px-4 py-3">
-                      {customer.gstNumber ? <div className="text-sm font-mono">{customer.gstNumber}</div> : <div className="text-gray-500 dark:text-gray-400">-</div>}
+                      <div className="text-gray-500 dark:text-gray-400">{customer.address || '-'}</div>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">

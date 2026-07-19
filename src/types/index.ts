@@ -10,7 +10,6 @@ export interface Customer {
   name: string;
   mobileNumber: string;
   address?: string;
-  gstNumber?: string;
   createdAt: Date | any; // allow firestore timestamp
 }
 
