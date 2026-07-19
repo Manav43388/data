@@ -111,7 +111,7 @@ export const OrderList: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View Details">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View Details" onClick={() => navigate(`/orders/${order.id}`)}>
                         <Eye className="h-4 w-4 text-gray-500" />
                       </Button>
                     </td>

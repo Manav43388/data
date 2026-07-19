@@ -9,22 +9,25 @@ export interface Customer {
   id?: string;
   name: string;
   mobileNumber: string;
-  address?: string;
+  whatsappNumber: string;
+  email?: string;
+  notes?: string;
   createdAt: Date | any; // allow firestore timestamp
 }
 
 export interface Address {
   id?: string;
   customerId: string;
-  fullName: string;
-  mobileNumber: string;
-  addressLine1: string;
-  addressLine2?: string;
-  landmark?: string;
+  houseNo: string;
+  building: string;
+  street: string;
   area: string;
+  landmark?: string;
   city: string;
+  district: string;
   state: string;
   pinCode: string;
+  country: string;
 }
 
 export interface Product {

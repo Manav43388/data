@@ -11,6 +11,7 @@ import { CustomerList } from './pages/Customers/CustomerList';
 import { CustomerForm } from './pages/Customers/CustomerForm';
 import { OrderList } from './pages/Orders/OrderList';
 import { OrderForm } from './pages/Orders/OrderForm';
+import { OrderDetails } from './pages/Orders/OrderDetails';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
             <Route path="/products/new" element={<AdminLayout><ProductForm /></AdminLayout>} />
             <Route path="/orders" element={<AdminLayout><OrderList /></AdminLayout>} />
             <Route path="/orders/new" element={<AdminLayout><OrderForm /></AdminLayout>} />
+            <Route path="/orders/:id" element={<AdminLayout><OrderDetails /></AdminLayout>} />
             <Route path="/payments" element={<AdminLayout><div className="p-4 bg-white dark:bg-slate-900 rounded-lg shadow h-64 flex items-center justify-center">Payments</div></AdminLayout>} />
             <Route path="/shipping" element={<AdminLayout><div className="p-4 bg-white dark:bg-slate-900 rounded-lg shadow h-64 flex items-center justify-center">Shipping</div></AdminLayout>} />
             <Route path="/reports" element={<AdminLayout><div className="p-4 bg-white dark:bg-slate-900 rounded-lg shadow h-64 flex items-center justify-center">Reports</div></AdminLayout>} />
