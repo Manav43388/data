@@ -5,7 +5,7 @@ import { getStorage } from 'firebase/storage';
 
 // Hardcoded Firebase configuration to bypass Vercel env var issues
 const firebaseConfig = {
-  apiKey: "AIzaSyA_RFbi1wK9-rZYEbAt1H-VIpZsH21j3Uc",
+  apiKey: "AIzaSyA_RFbi1WK9-rZYEbAt1H-VIpZsH21j3Uc",
   authDomain: "data-storeing.firebaseapp.com",
   projectId: "data-storeing",
   storageBucket: "data-storeing.firebasestorage.app",
