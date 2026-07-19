@@ -2,12 +2,10 @@ import {
   collection, 
   doc, 
   getDocs, 
-  getDoc, 
   addDoc, 
   updateDoc, 
   deleteDoc, 
   query, 
-  where,
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';

@@ -4,7 +4,7 @@ import { Plus, Search, Edit, Trash2, MapPin, History } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import { Customer } from '../../types';
+import type { Customer } from '../../types';
 import { getDocuments } from '../../services/db';
 
 export const CustomerList: React.FC = () => {
@@ -102,7 +102,7 @@ export const CustomerList: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

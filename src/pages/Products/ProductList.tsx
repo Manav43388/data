@@ -4,7 +4,7 @@ import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import { Product } from '../../types';
+import type { Product } from '../../types';
 import { getDocuments } from '../../services/db';
 
 export const ProductList: React.FC = () => {
@@ -97,7 +97,7 @@ export const ProductList: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

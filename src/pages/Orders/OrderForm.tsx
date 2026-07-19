@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { addDocument, getDocuments } from '../../services/db';
-import { Customer, Product } from '../../types';
+import type { Customer, Product } from '../../types';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
@@ -242,13 +242,13 @@ export const OrderForm: React.FC = () => {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Shipping</span>
                 <div className="w-24">
-                  <Input type="number" size="sm" className="h-8 text-right" {...register('shippingCharges', { valueAsNumber: true })} />
+                  <Input type="number" className="h-8 text-right" {...register('shippingCharges', { valueAsNumber: true })} />
                 </div>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Discount</span>
                 <div className="w-24">
-                  <Input type="number" size="sm" className="h-8 text-right" {...register('discount', { valueAsNumber: true })} />
+                  <Input type="number" className="h-8 text-right" {...register('discount', { valueAsNumber: true })} />
                 </div>
               </div>
               <div className="border-t dark:border-gray-700 pt-4 mt-2 flex justify-between items-center">

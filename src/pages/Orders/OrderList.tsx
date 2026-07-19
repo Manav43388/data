@@ -4,7 +4,7 @@ import { Plus, Search, Eye, Filter, Download } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import { Order } from '../../types';
+import type { Order } from '../../types';
 import { getDocuments } from '../../services/db';
 
 export const OrderList: React.FC = () => {
@@ -116,7 +116,7 @@ export const OrderList: React.FC = () => {
                       </Button>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
