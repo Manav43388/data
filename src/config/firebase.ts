@@ -3,19 +3,15 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// TODO: Replace with your actual Firebase configuration
+// Hardcoded Firebase configuration to bypass Vercel env var issues
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "dummy_api_key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "dummy_auth_domain",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "dummy_project_id",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "dummy_storage_bucket",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "dummy_sender_id",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "dummy_app_id"
+  apiKey: "AIzaSyA_RFbi1wK9-rZYEbAt1H-VIpZsH21j3Uc",
+  authDomain: "data-storeing.firebaseapp.com",
+  projectId: "data-storeing",
+  storageBucket: "data-storeing.firebasestorage.app",
+  messagingSenderId: "72410661880",
+  appId: "1:72410661880:web:47ddaf2a6f0a23c6ab8c0d"
 };
-
-console.log("Firebase Debug - Raw Key:", import.meta.env.VITE_FIREBASE_API_KEY);
-console.log("Firebase Debug - Config Key length:", firebaseConfig.apiKey.length);
-console.log("Firebase Debug - Config Key starts with:", firebaseConfig.apiKey.substring(0, 5));
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
