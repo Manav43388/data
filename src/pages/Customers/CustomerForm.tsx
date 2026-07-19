@@ -12,6 +12,7 @@ import { addDocument, getDocuments } from '../../services/db';
 const customerSchema = z.object({
   name: z.string().min(1, 'Customer name is required'),
   mobileNumber: z.string().regex(/^[0-9+\s-]{10,15}$/, 'Valid mobile number is required'),
+  address: z.string().optional(),
   gstNumber: z.string().optional(),
 });
 
@@ -79,6 +80,11 @@ export const CustomerForm: React.FC = () => {
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mobile Number</label>
                 <Input placeholder="e.g. 9876543210" {...register('mobileNumber')} />
                 {errors.mobileNumber && <p className="text-xs text-red-500">{errors.mobileNumber.message}</p>}
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Address (Optional)</label>
+                <Input placeholder="e.g. 123 Main St, Mumbai" {...register('address')} />
               </div>
 
               <div className="space-y-2">

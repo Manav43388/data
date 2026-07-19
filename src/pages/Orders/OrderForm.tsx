@@ -25,6 +25,7 @@ const orderSchema = z.object({
   discount: z.number().min(0, 'Discount cannot be negative'),
   paymentMethod: z.string(),
   paymentStatus: z.string(),
+  trackingId: z.string().optional(),
 });
 
 type OrderFormData = z.infer<typeof orderSchema>;
@@ -208,7 +209,7 @@ export const OrderForm: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Details</CardTitle>
+              <CardTitle>Additional Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -226,6 +227,10 @@ export const OrderForm: React.FC = () => {
                   <option value="Verified">Verified</option>
                   <option value="Failed">Failed</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tracking ID (Optional)</label>
+                <Input placeholder="e.g. AWB123456789" {...register('trackingId')} />
               </div>
             </CardContent>
           </Card>
