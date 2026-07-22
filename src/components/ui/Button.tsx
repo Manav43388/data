@@ -19,10 +19,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50";
     
     const variants = {
-      primary: "bg-primary text-primary-foreground hover:bg-primary-dark text-white",
-      secondary: "bg-secondary text-secondary-foreground hover:bg-secondary-dark text-white",
-      outline: "border border-gray-300 bg-transparent hover:bg-gray-100 text-foreground dark:border-gray-700 dark:hover:bg-gray-800",
-      ghost: "bg-transparent hover:bg-gray-100 text-foreground dark:hover:bg-gray-800",
+      primary: "bg-primary text-white hover:bg-primary-dark",
+      secondary: "bg-secondary text-white hover:bg-secondary-dark",
+      outline: "border border-gray-300 dark:border-gray-700 bg-transparent text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-800 dark:hover:text-white",
+      ghost: "bg-transparent text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-800 dark:hover:text-white",
       danger: "bg-red-600 text-white hover:bg-red-700",
     };
     
