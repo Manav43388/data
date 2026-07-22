@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { addDocument, getDocuments } from '../../services/db';
+import { useToast } from '../../contexts/ToastContext';
+import type { Customer } from '../../types';
 
 const customerFormSchema = z.object({
-  // Customer Details
   name: z.string().min(1, 'Customer name is required'),
   mobileNumber: z.string().regex(/^[0-9+\s-]{10,15}$/, 'Valid mobile number is required'),
   whatsappNumber: z.string().regex(/^[0-9+\s-]{10,15}$/, 'Valid whatsapp number is required'),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
+  customerType: z.string(),
   notes: z.string().optional(),
   
   // Shipping Address
@@ -27,76 +29,60 @@ const customerFormSchema = z.object({
   district: z.string().min(1, 'District is required'),
   state: z.string().min(1, 'State is required'),
   pinCode: z.string().min(1, 'PIN Code is required'),
-  country: z.string().default('India'),
+  country: z.string().min(1, 'Country is required'),
 });
 
 type CustomerFormData = z.infer<typeof customerFormSchema>;
 
 export const CustomerForm: React.FC = () => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [duplicateCustomer, setDuplicateCustomer] = useState<Customer | null>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<CustomerFormData>({
     resolver: zodResolver(customerFormSchema),
     defaultValues: {
-      country: 'India'
+      country: 'India',
+      customerType: 'Regular',
     }
   });
 
   const mobileNumber = watch('mobileNumber');
 
-  // Auto-fill WhatsApp number with Mobile number if it's empty or matching previously
-  useEffect(() => {
+  // Auto-sync WhatsApp number with Mobile number if empty
+  React.useEffect(() => {
     if (mobileNumber && mobileNumber.length >= 10) {
-      setValue('whatsappNumber', mobileNumber, { shouldValidate: true });
+      const currentWA = watch('whatsappNumber');
+      if (!currentWA) {
+        setValue('whatsappNumber', mobileNumber);
+      }
     }
-  }, [mobileNumber, setValue]);
+  }, [mobileNumber, setValue, watch]);
 
   const onSubmit = async (data: CustomerFormData) => {
     setIsSubmitting(true);
-    setErrorMsg('');
+    setDuplicateCustomer(null);
     try {
-      // Check for duplicates
-      const existingCustomers = await getDocuments('customers');
-      const isDuplicate = existingCustomers.some((c: any) => c.mobileNumber === data.mobileNumber);
+      // 1. Check duplicate mobile number
+      const existingCustomers = await getDocuments('customers') as Customer[];
+      const duplicate = existingCustomers.find((c) => c.mobileNumber === data.mobileNumber);
       
-      if (isDuplicate) {
-        setErrorMsg('A customer with this mobile number already exists!');
+      if (duplicate) {
+        setDuplicateCustomer(duplicate);
+        showToast('Customer already exists with this mobile number!', 'error');
         setIsSubmitting(false);
         return;
       }
 
-      // 1. Save Customer
-      const customerData = {
-        name: data.name,
-        mobileNumber: data.mobileNumber,
-        whatsappNumber: data.whatsappNumber,
-        email: data.email || '',
-        notes: data.notes || '',
-      };
-      const customerId = await addDocument('customers', customerData);
-
-      // 2. Save Address
-      const addressData = {
-        customerId,
-        houseNo: data.houseNo,
-        building: data.building,
-        street: data.street,
-        area: data.area,
-        landmark: data.landmark || '',
-        city: data.city,
-        district: data.district,
-        state: data.state,
-        pinCode: data.pinCode,
-        country: data.country,
-      };
-      await addDocument('addresses', addressData);
-
-      navigate('/customers');
+      // 2. Save Customer with embedded complete address
+      const customerId = await addDocument('customers', data);
+      
+      showToast('Customer saved successfully!');
+      navigate(`/customers/${customerId}`);
     } catch (error) {
       console.error("Error adding customer:", error);
-      setErrorMsg('Failed to add customer.');
+      showToast('Failed to add customer', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -105,21 +91,35 @@ export const CustomerForm: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-10">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Add New Customer</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Add New Customer</h1>
+          <p className="text-sm text-gray-500">Save complete customer master details and shipping address.</p>
+        </div>
         <Button variant="outline" onClick={() => navigate('/customers')}>Cancel</Button>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {errorMsg && (
-          <div className="p-4 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-md text-sm font-medium">
-            {errorMsg}
+      {duplicateCustomer && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="font-bold text-amber-900 dark:text-amber-300">Customer Already Exists!</p>
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                "{duplicateCustomer.name}" is already registered with mobile number {duplicateCustomer.mobileNumber}.
+              </p>
+            </div>
           </div>
-        )}
+          <Button onClick={() => navigate(`/customers/${duplicateCustomer.id}`)}>
+            Open Existing Customer <ArrowRight className="ml-2 w-4 h-4" />
+          </Button>
+        </div>
+      )}
 
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Customer Details */}
         <Card>
           <CardHeader>
-            <CardTitle>Customer Details</CardTitle>
+            <CardTitle>1. Contact Information & Category</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -142,14 +142,22 @@ export const CustomerForm: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address (Optional)</label>
-                <Input placeholder="e.g. rahul@example.com" type="email" {...register('email')} />
-                {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Customer Tag / Category</label>
+                <select className="w-full h-10 px-3 py-2 border rounded-md dark:bg-slate-900 dark:border-gray-700" {...register('customerType')}>
+                  <option value="Regular">Regular Customer</option>
+                  <option value="Wholesale">Wholesale Customer</option>
+                  <option value="VIP">VIP Customer</option>
+                </select>
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address (Optional)</label>
+                <Input placeholder="e.g. rahul@example.com" type="email" {...register('email')} />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Customer Notes (Optional)</label>
-                <Input placeholder="e.g. Regular Customer, Wholesale" {...register('notes')} />
+                <Input placeholder="e.g. Prefers Delhivery courier, prefers morning delivery" {...register('notes')} />
               </div>
             </div>
           </CardContent>
@@ -158,7 +166,7 @@ export const CustomerForm: React.FC = () => {
         {/* Shipping Address */}
         <Card>
           <CardHeader>
-            <CardTitle>Shipping Address</CardTitle>
+            <CardTitle>2. Complete Shipping Address</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -214,18 +222,12 @@ export const CustomerForm: React.FC = () => {
                 <Input placeholder="e.g. 400069" {...register('pinCode')} />
                 {errors.pinCode && <p className="text-xs text-red-500">{errors.pinCode.message}</p>}
               </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Country</label>
-                <Input {...register('country')} />
-                {errors.country && <p className="text-xs text-red-500">{errors.country.message}</p>}
-              </div>
             </div>
 
             <div className="pt-8 flex justify-end">
               <Button type="submit" size="lg" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                Save Customer & Address
+                Save Customer Master Record
               </Button>
             </div>
           </CardContent>

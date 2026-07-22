@@ -1,67 +1,62 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, MapPin, History, Copy, Check, MessageCircle } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, RotateCcw, MessageCircle, Phone } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import type { Customer, Order, Address } from '../../types';
-import { getDocuments, deleteDocument } from '../../services/db';
+import type { Customer, Order } from '../../types';
+import { getDocuments, getTrashDocuments, softDeleteDocument, restoreDocument } from '../../services/db';
+import { useToast } from '../../contexts/ToastContext';
 
 export const CustomerList: React.FC = () => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showTrash, setShowTrash] = useState(false);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [showTrash]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [custData, ordData, addrData] = await Promise.all([
-        getDocuments('customers'),
-        getDocuments('orders'),
-        getDocuments('addresses')
+      const [custData, ordData] = await Promise.all([
+        showTrash ? getTrashDocuments('customers') : getDocuments('customers'),
+        getDocuments('orders')
       ]);
       setCustomers(custData as Customer[]);
       setOrders(ordData as Order[]);
-      setAddresses(addrData as Address[]);
     } catch (error) {
       console.error("Error fetching data:", error);
+      showToast('Error loading customer list', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this customer?')) {
+  const handleSoftDelete = async (id: string, name: string) => {
+    if (window.confirm(`Move customer "${name}" to Trash?`)) {
       try {
-        await deleteDocument('customers', id);
-        // We probably should delete associated addresses, but leaving as is for simplicity
+        await softDeleteDocument('customers', id);
+        showToast(`Customer moved to trash`);
         fetchData();
       } catch (error) {
-        console.error("Error deleting customer:", error);
+        showToast('Failed to delete customer', 'error');
       }
     }
   };
 
-  const formatAddress = (addr: Address) => {
-    return `${addr.houseNo}, ${addr.building}, ${addr.street}, ${addr.area}${addr.landmark ? ', ' + addr.landmark : ''}, ${addr.city}, ${addr.district}, ${addr.state} - ${addr.pinCode}`;
-  };
-
-  const handleCopyAddress = (customerId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const custAddresses = addresses.filter(a => a.customerId === customerId);
-    if (custAddresses.length > 0) {
-      const textToCopy = formatAddress(custAddresses[0]);
-      navigator.clipboard.writeText(textToCopy);
-      setCopiedId(customerId);
-      setTimeout(() => setCopiedId(null), 2000);
+  const handleRestore = async (id: string, name: string) => {
+    try {
+      await restoreDocument('customers', id);
+      showToast(`Customer "${name}" restored!`);
+      fetchData();
+    } catch (error) {
+      showToast('Failed to restore customer', 'error');
     }
   };
 
@@ -69,28 +64,40 @@ export const CustomerList: React.FC = () => {
     const q = searchQuery.toLowerCase();
     return c.name.toLowerCase().includes(q) || 
            c.mobileNumber.includes(q) || 
-           (c.whatsappNumber && c.whatsappNumber.includes(q));
+           (c.whatsappNumber && c.whatsappNumber.includes(q)) ||
+           (c.city && c.city.toLowerCase().includes(q));
   });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customers</h1>
-        <Button className="w-full sm:w-auto" onClick={() => navigate('/customers/new')}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Customer
-        </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customer Directory</h1>
+          <p className="text-sm text-gray-500">Master customer directory storing contact profiles and full shipping addresses.</p>
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => setShowTrash(!showTrash)}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            {showTrash ? 'View Active Directory' : 'View Trash'}
+          </Button>
+          {!showTrash && (
+            <Button className="w-full sm:w-auto font-bold" onClick={() => navigate('/customers/new')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Customer
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <CardTitle>Customer Directory</CardTitle>
+            <CardTitle>{showTrash ? 'Trashed Customers' : 'All Customers'}</CardTitle>
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
               <Input 
                 className="pl-9" 
-                placeholder="Search by name, mobile, or WA..." 
+                placeholder="Search by name, mobile, WA, city..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -104,8 +111,8 @@ export const CustomerList: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3">Customer Details</th>
                   <th className="px-4 py-3">Contact</th>
-                  <th className="px-4 py-3">Primary Address</th>
-                  <th className="px-4 py-3">Metrics</th>
+                  <th className="px-4 py-3">City & State</th>
+                  <th className="px-4 py-3">Lifetime Orders</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -116,64 +123,71 @@ export const CustomerList: React.FC = () => {
                   </tr>
                 ) : filteredCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No customers found.</td>
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                      {showTrash ? 'No trashed customers found.' : 'No customers found.'}
+                    </td>
                   </tr>
                 ) : (
                   filteredCustomers.map((customer) => {
                     const custOrders = orders.filter(o => o.customerId === customer.id);
                     const totalPurchased = custOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-                    const custAddresses = addresses.filter(a => a.customerId === customer.id);
-                    
+
                     return (
                       <tr key={customer.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-800/50">
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900 dark:text-white">{customer.name}</div>
-                          {customer.notes && (
-                            <span className="inline-flex mt-1 items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-400/20">
-                              {customer.notes}
-                            </span>
-                          )}
+                          <div 
+                            className="font-bold text-gray-900 dark:text-white cursor-pointer hover:text-primary transition-colors flex items-center gap-2"
+                            onClick={() => navigate(`/customers/${customer.id}`)}
+                          >
+                            {customer.name}
+                            {customer.customerType && (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                customer.customerType === 'VIP' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30' :
+                                customer.customerType === 'Wholesale' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30' :
+                                'bg-gray-100 text-gray-700 dark:bg-slate-800'
+                              }`}>
+                                {customer.customerType}
+                              </span>
+                            )}
+                          </div>
+                          {customer.notes && <p className="text-xs text-gray-500 italic mt-0.5">{customer.notes}</p>}
                         </td>
-                        <td className="px-4 py-3 space-y-1">
-                          <div className="flex items-center text-gray-700 dark:text-gray-300">
-                            {customer.mobileNumber}
+                        <td className="px-4 py-3 space-y-0.5 text-xs">
+                          <div className="flex items-center text-gray-800 dark:text-gray-200 font-medium">
+                            <Phone className="w-3 h-3 mr-1 text-gray-400" /> {customer.mobileNumber}
                           </div>
                           {customer.whatsappNumber && (
-                            <div className="flex items-center text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                            <div className="flex items-center text-emerald-600 dark:text-emerald-400 font-medium">
                               <MessageCircle className="w-3 h-3 mr-1" /> {customer.whatsappNumber}
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 max-w-xs">
-                          {custAddresses.length > 0 ? (
-                            <div className="flex items-start gap-2">
-                              <p className="text-gray-500 dark:text-gray-400 text-xs truncate" title={formatAddress(custAddresses[0])}>
-                                {formatAddress(custAddresses[0])}
-                              </p>
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0" onClick={(e) => handleCopyAddress(customer.id!, e)} title="Copy Complete Address">
-                                {copiedId === customer.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5 text-gray-400" />}
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 text-xs italic">No address saved</span>
-                          )}
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900 dark:text-white">{customer.city}, {customer.state}</div>
+                          <div className="text-xs text-gray-500">PIN: {customer.pinCode}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-xs font-medium text-gray-900 dark:text-white">{custOrders.length} Orders</div>
-                          <div className="text-xs text-gray-500">₹{totalPurchased.toFixed(2)}</div>
+                          <div className="text-xs font-bold text-gray-900 dark:text-white">{custOrders.length} Orders</div>
+                          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">₹{totalPurchased.toFixed(2)}</div>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Order History">
-                              <History className="h-4 w-4 text-purple-500" />
+                          {showTrash ? (
+                            <Button variant="outline" size="sm" onClick={() => handleRestore(customer.id!, customer.name)}>
+                              <RotateCcw className="w-3.5 h-3.5 mr-1" /> Restore
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Edit (Coming Soon)">
-                              <Edit className="h-4 w-4 text-blue-500" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleDelete(customer.id!)} title="Delete">
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
+                          ) : (
+                            <div className="flex justify-end gap-1">
+                              <Button variant="outline" size="sm" className="h-8 px-2 text-xs border-emerald-500 text-emerald-600 hover:bg-emerald-50" onClick={() => navigate(`/orders/new?customerId=${customer.id}`)} title="New Order">
+                                <Plus className="h-3.5 w-3.5 mr-1" /> Order
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View Profile" onClick={() => navigate(`/customers/${customer.id}`)}>
+                                <Eye className="h-4 w-4 text-purple-500" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleSoftDelete(customer.id!, customer.name)} title="Delete">
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );

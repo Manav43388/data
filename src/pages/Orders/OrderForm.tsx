@@ -2,57 +2,62 @@ import React, { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Loader2, IndianRupee, Search, UploadCloud } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, Trash2, Loader2, IndianRupee, Search, UploadCloud, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import { addDocument, getDocuments } from '../../services/db';
-import type { Customer, Product, Address } from '../../types';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { addDocument, getDocuments, generateNextOrderId, generateNextInvoiceId, getStoreSettings } from '../../services/db';
+import type { Customer, Product } from '../../types';
+import { useToast } from '../../contexts/ToastContext';
 
 const orderItemSchema = z.object({
   productId: z.string().min(1, 'Product is required'),
+  productName: z.string(),
+  fragrance: z.string().optional(),
+  weight: z.number().optional(),
   quantity: z.number().min(1, 'Quantity must be at least 1'),
-  unitPrice: z.number().min(0),
+  price: z.number().min(0),
+  imageUrl: z.string().optional(),
 });
 
 const orderSchema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
-  addressId: z.string().min(1, 'Address is required'),
   items: z.array(orderItemSchema).min(1, 'At least one product is required'),
-  shippingCharges: z.number().min(0, 'Shipping cannot be negative'),
+  shippingCharge: z.number().min(0, 'Shipping cannot be negative'),
   discount: z.number().min(0, 'Discount cannot be negative'),
-  paymentMethod: z.string(),
-  paymentStatus: z.string(),
+  paymentMethod: z.string().min(1, 'Payment Method is required'),
+  paymentStatus: z.enum(['Pending Payment', 'Payment Verified', 'Failed', 'Refunded']),
   upiTransactionId: z.string().optional(),
   paymentScreenshotUrl: z.string().optional(),
+  orderNotes: z.string().optional(),
 });
 
 type OrderFormData = z.infer<typeof orderSchema>;
 
 export const OrderForm: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preSelectedCustomerId = searchParams.get('customerId');
+  const { showToast } = useToast();
+
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   
-  // Workflow States
+  // Selected Customer Workflow
   const [searchMobile, setSearchMobile] = useState('');
-  const [foundCustomer, setFoundCustomer] = useState<Customer | null>(null);
-  const [customerAddresses, setCustomerAddresses] = useState<Address[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<OrderFormData>({
     resolver: zodResolver(orderSchema),
     defaultValues: {
-      items: [{ productId: '', quantity: 1, unitPrice: 0 }],
-      shippingCharges: 50,
+      items: [{ productId: '', productName: '', quantity: 1, price: 0 }],
+      shippingCharge: 50,
       discount: 0,
       paymentMethod: 'UPI',
-      paymentStatus: 'Verified'
+      paymentStatus: 'Pending Payment',
     }
   });
 
@@ -61,69 +66,79 @@ export const OrderForm: React.FC = () => {
     name: "items"
   });
 
-  // Watch values to auto-calculate totals
+  // Watch values for live calculations
   const watchItems = watch("items");
-  const shippingCharges = watch("shippingCharges") || 0;
+  const shippingCharge = watch("shippingCharge") || 0;
   const discount = watch("discount") || 0;
 
-  const subtotal = watchItems.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-  const grandTotal = subtotal + shippingCharges - discount;
+  const subtotal = watchItems.reduce((acc, item) => acc + ((item.quantity || 0) * (item.price || 0)), 0);
+  const grandTotal = Math.max(0, subtotal + shippingCharge - discount);
 
   useEffect(() => {
-    const fetchBaseData = async () => {
-      const custData = await getDocuments('customers');
-      const prodData = await getDocuments('products');
-      setAllCustomers(custData as Customer[]);
-      setProducts(prodData as Product[]);
-    };
-    fetchBaseData();
-  }, []);
+    const fetchInitialData = async () => {
+      try {
+        const [custData, prodData, storeSettings] = await Promise.all([
+          getDocuments('customers'),
+          getDocuments('products'),
+          getStoreSettings()
+        ]);
+        const activeCusts = custData as Customer[];
+        const activeProds = prodData as Product[];
+        setAllCustomers(activeCusts);
+        setProducts(activeProds);
 
-  const searchCustomer = async () => {
+        setValue('shippingCharge', storeSettings.defaultShippingCharge || 50);
+
+        // Pre-select customer if passed in URL query
+        if (preSelectedCustomerId) {
+          const found = activeCusts.find(c => c.id === preSelectedCustomerId);
+          if (found) {
+            setSelectedCustomer(found);
+            setValue('customerId', found.id!);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+      }
+    };
+    fetchInitialData();
+  }, [preSelectedCustomerId, setValue]);
+
+  const handleCustomerSearch = () => {
     if (!searchMobile) return;
     setIsSearching(true);
-    const customer = allCustomers.find(c => c.mobileNumber.includes(searchMobile) || (c.whatsappNumber && c.whatsappNumber.includes(searchMobile)));
-    
-    if (customer) {
-      setFoundCustomer(customer);
-      setValue('customerId', customer.id!);
-      
-      // Fetch addresses for this customer
-      const allAddresses = await getDocuments('addresses') as Address[];
-      const cAddrs = allAddresses.filter(a => a.customerId === customer.id);
-      setCustomerAddresses(cAddrs);
-      if (cAddrs.length > 0) {
-        setValue('addressId', cAddrs[0].id!);
-      }
+    const found = allCustomers.find(c => 
+      c.mobileNumber.includes(searchMobile) || 
+      (c.whatsappNumber && c.whatsappNumber.includes(searchMobile)) ||
+      c.name.toLowerCase().includes(searchMobile.toLowerCase())
+    );
+
+    if (found) {
+      setSelectedCustomer(found);
+      setValue('customerId', found.id!);
+      showToast(`Customer "${found.name}" selected`);
     } else {
-      setFoundCustomer(null);
-      setCustomerAddresses([]);
-      alert("Customer not found. Please add them in the Customers section first.");
+      setSelectedCustomer(null);
+      showToast('Customer not found. Please add them first.', 'error');
     }
     setIsSearching(false);
   };
 
-  const generateOrderId = async () => {
-    const year = new Date().getFullYear();
-    const prefix = `AG${year}`;
-    
-    const q = query(collection(db, 'orders'), orderBy('orderId', 'desc'), limit(1));
-    const snapshot = await getDocs(q);
-    
-    let nextNum = 1;
-    if (!snapshot.empty) {
-      const lastId = snapshot.docs[0].data().orderId as string;
-      if (lastId.startsWith(prefix)) {
-        const lastNum = parseInt(lastId.substring(6));
-        nextNum = lastNum + 1;
+  const handleProductSelect = (index: number, productId: string) => {
+    const prod = products.find(p => p.id === productId);
+    if (prod) {
+      setValue(`items.${index}.productId`, prod.id!);
+      setValue(`items.${index}.productName`, prod.name);
+      setValue(`items.${index}.fragrance`, prod.fragrance);
+      setValue(`items.${index}.weight`, prod.weight);
+      setValue(`items.${index}.price`, prod.price);
+      if (prod.imageUrl) {
+        setValue(`items.${index}.imageUrl`, prod.imageUrl);
       }
     }
-    
-    return `${prefix}${nextNum.toString().padStart(4, '0')}`;
   };
 
-  // Utility to compress image to base64 so it fits in Firestore doc
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -142,251 +157,337 @@ export const OrderForm: React.FC = () => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        // compress heavily to fit in firestore (0.5 quality jpeg)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
         setValue('paymentScreenshotUrl', dataUrl);
+        showToast('Payment screenshot attached');
       };
     };
   };
 
   const onSubmit = async (data: OrderFormData) => {
+    if (!selectedCustomer) {
+      showToast('Please select a customer first', 'error');
+      return;
+    }
+
+    // Live Stock Validation
+    for (const item of data.items) {
+      const prod = products.find(p => p.id === item.productId);
+      if (prod && item.quantity > prod.stock) {
+        showToast(`Stock Alert: Only ${prod.stock} units available for "${prod.name}"`, 'error');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
-      const orderId = await generateOrderId();
+      // Generate Sequential IDs
+      const orderId = await generateNextOrderId();
+      const invoiceNumber = await generateNextInvoiceId();
       
-      const fullOrder = {
-        ...data,
-        orderId,
-        orderDate: new Date(),
-        subtotal,
-        totalAmount: grandTotal,
-        orderStatus: 'Pending',
+      const fullShippingAddress = {
+        houseNo: selectedCustomer.houseNo || '',
+        building: selectedCustomer.building || '',
+        street: selectedCustomer.street || '',
+        area: selectedCustomer.area || '',
+        landmark: selectedCustomer.landmark || '',
+        city: selectedCustomer.city || '',
+        district: selectedCustomer.district || '',
+        state: selectedCustomer.state || '',
+        pinCode: selectedCustomer.pinCode || '',
+        country: selectedCustomer.country || 'India',
       };
 
-      await addDocument('orders', fullOrder);
-      navigate('/orders');
+      const orderPayload = {
+        orderId,
+        invoiceNumber,
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        customerMobile: selectedCustomer.mobileNumber,
+        customerWhatsapp: selectedCustomer.whatsappNumber || selectedCustomer.mobileNumber,
+        shippingAddress: fullShippingAddress,
+        items: data.items,
+        subtotal,
+        shippingCharge: data.shippingCharge,
+        discount: data.discount,
+        totalAmount: grandTotal,
+        paymentMethod: data.paymentMethod,
+        paymentStatus: data.paymentStatus,
+        orderStatus: data.paymentStatus === 'Payment Verified' ? 'Confirmed' : 'Pending Payment',
+        shippingStatus: 'Ready to Pack',
+        upiTransactionId: data.upiTransactionId || '',
+        paymentScreenshotUrl: data.paymentScreenshotUrl || '',
+        orderNotes: data.orderNotes || '',
+        orderDate: new Date(),
+        timeline: [
+          { status: 'Order Created', timestamp: new Date() },
+          ...(data.paymentStatus === 'Payment Verified' ? [{ status: 'Payment Verified', timestamp: new Date() }] : [])
+        ]
+      };
+
+      const newDocId = await addDocument('orders', orderPayload);
+      showToast(`Order ${orderId} created successfully!`);
+      navigate(`/orders/${newDocId}`);
     } catch (error) {
       console.error("Error creating order:", error);
-      alert("Failed to create order");
+      showToast('Failed to create order', 'error');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleProductSelect = (index: number, productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (product) {
-      setValue(`items.${index}.unitPrice`, product.price);
     }
   };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Order</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Order</h1>
+          <p className="text-sm text-gray-500">Generate sequential Order ID & link customer and items.</p>
+        </div>
         <Button variant="outline" onClick={() => navigate('/orders')}>Cancel</Button>
       </div>
 
-      {/* Step 1: Customer Search */}
+      {/* Step 1: Customer Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>1. Select Customer</CardTitle>
+          <CardTitle className="text-base">1. Customer Information & Address</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 mb-4">
-            <Input 
-              placeholder="Search by Mobile Number" 
-              value={searchMobile} 
-              onChange={(e) => setSearchMobile(e.target.value)} 
-              className="max-w-xs"
-              onKeyDown={(e) => e.key === 'Enter' && searchCustomer()}
-            />
-            <Button onClick={searchCustomer} disabled={isSearching}>
-              {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
-              Search
-            </Button>
-          </div>
-
-          {foundCustomer && (
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-emerald-800 dark:text-emerald-400">{foundCustomer.name}</h3>
-                <p className="text-sm text-emerald-600 dark:text-emerald-500">{foundCustomer.mobileNumber}</p>
+          {!selectedCustomer ? (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="Search by Mobile, WhatsApp, or Name..." 
+                  value={searchMobile} 
+                  onChange={(e) => setSearchMobile(e.target.value)} 
+                  className="max-w-md"
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleCustomerSearch())}
+                />
+                <Button type="button" onClick={handleCustomerSearch} disabled={isSearching}>
+                  {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                  Search Customer
+                </Button>
+                <Button type="button" variant="outline" onClick={() => navigate('/customers/new')}>
+                  + Add New Customer
+                </Button>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setFoundCustomer(null)}>Change</Button>
+
+              {allCustomers.length > 0 && (
+                <div className="pt-2">
+                  <p className="text-xs text-gray-500 mb-2 font-medium">Or select recent customer:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allCustomers.slice(0, 5).map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomer(c);
+                          setValue('customerId', c.id!);
+                        }}
+                        className="px-3 py-1.5 bg-gray-100 dark:bg-slate-800 hover:bg-primary/10 rounded-full text-xs font-medium text-gray-800 dark:text-gray-200 border"
+                      >
+                        {c.name} ({c.mobileNumber})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="font-bold text-emerald-900 dark:text-emerald-200 text-lg">{selectedCustomer.name}</h3>
+                </div>
+                <p className="text-sm text-emerald-800 dark:text-emerald-300 mt-1">
+                  Mobile: {selectedCustomer.mobileNumber} | WhatsApp: {selectedCustomer.whatsappNumber || selectedCustomer.mobileNumber}
+                </p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 font-medium">
+                  Shipping Address: {selectedCustomer.houseNo}, {selectedCustomer.building}, {selectedCustomer.street}, {selectedCustomer.area}, {selectedCustomer.city}, {selectedCustomer.state} - {selectedCustomer.pinCode}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedCustomer(null)}>
+                Change Customer
+              </Button>
             </div>
           )}
           {errors.customerId && <p className="text-xs text-red-500 mt-2">{errors.customerId.message}</p>}
         </CardContent>
       </Card>
 
-      {/* Step 2 & Beyond: Only visible if customer is selected */}
-      {foundCustomer && (
+      {/* Step 2: Line Items & Stock Validation */}
+      {selectedCustomer && (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>2. Shipping Address</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {customerAddresses.length === 0 ? (
-                <div className="text-amber-600 dark:text-amber-400 p-3 bg-amber-50 dark:bg-amber-900/20 rounded">
-                  No saved addresses found. Please edit the customer to add an address first.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {customerAddresses.map((addr) => (
-                    <label key={addr.id} className="cursor-pointer border dark:border-gray-700 p-4 rounded-lg flex gap-3 items-start hover:bg-gray-50 dark:hover:bg-slate-800/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                      <input 
-                        type="radio" 
-                        value={addr.id} 
-                        {...register('addressId')} 
-                        className="mt-1"
-                      />
-                      <div className="text-sm">
-                        <p className="font-semibold mb-1">{addr.houseNo}, {addr.building}</p>
-                        <p className="text-gray-600 dark:text-gray-400">{addr.street}, {addr.area}</p>
-                        <p className="text-gray-600 dark:text-gray-400">{addr.city}, {addr.state} - {addr.pinCode}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {errors.addressId && <p className="text-xs text-red-500 mt-2">{errors.addressId.message}</p>}
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle>3. Products</CardTitle>
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ productId: '', quantity: 1, unitPrice: 0 })}>
-                  <Plus className="w-4 h-4 mr-2" /> Add Item
+                <CardTitle className="text-base">2. Product Line Items & Stock Check</CardTitle>
+                <Button type="button" variant="outline" size="sm" onClick={() => append({ productId: '', productName: '', quantity: 1, price: 0 })}>
+                  <Plus className="w-4 h-4 mr-2" /> Add Product
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {fields.map((field, index) => (
-                <div key={field.id} className="flex flex-col sm:flex-row gap-4 items-end p-4 border rounded-lg dark:border-gray-700 bg-gray-50 dark:bg-slate-800/50">
-                  <div className="flex-1 space-y-2 w-full">
-                    <label className="text-sm font-medium">Product</label>
-                    <select 
-                      className="w-full h-10 px-3 py-2 border rounded-md dark:bg-slate-900 dark:border-gray-700"
-                      {...register(`items.${index}.productId`)}
-                      onChange={(e) => {
-                        register(`items.${index}.productId`).onChange(e);
-                        handleProductSelect(index, e.target.value);
-                      }}
-                    >
-                      <option value="">-- Select Product --</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} (₹{p.price})</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="w-full sm:w-24 space-y-2">
-                    <label className="text-sm font-medium">Price (₹)</label>
-                    <Input type="number" readOnly className="bg-gray-100 dark:bg-slate-800" {...register(`items.${index}.unitPrice`, { valueAsNumber: true })} />
-                  </div>
-                  
-                  <div className="w-full sm:w-24 space-y-2">
-                    <label className="text-sm font-medium">Qty</label>
-                    <Input type="number" min="1" {...register(`items.${index}.quantity`, { valueAsNumber: true })} />
-                  </div>
-                  
-                  <div className="w-full sm:w-32 space-y-2">
-                    <label className="text-sm font-medium">Total</label>
-                    <div className="h-10 flex items-center px-3 border rounded-md bg-gray-100 dark:bg-slate-800 dark:border-gray-700 font-medium">
-                      ₹{(watchItems[index]?.quantity || 0) * (watchItems[index]?.unitPrice || 0)}
-                    </div>
-                  </div>
+              {fields.map((field, index) => {
+                const selectedProdId = watchItems[index]?.productId;
+                const currentProd = products.find(p => p.id === selectedProdId);
 
-                  <Button type="button" variant="ghost" className="h-10 px-3 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => remove(index)} disabled={fields.length === 1}>
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
-                </div>
-              ))}
+                return (
+                  <div key={field.id} className="p-4 border rounded-lg dark:border-gray-700 bg-gray-50 dark:bg-slate-800/50 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className="text-xs font-medium">Search / Select Product</label>
+                        <select 
+                          className="w-full h-10 px-3 py-2 border rounded-md dark:bg-slate-900 dark:border-gray-700 text-sm font-medium"
+                          value={selectedProdId}
+                          onChange={(e) => handleProductSelect(index, e.target.value)}
+                        >
+                          <option value="">-- Select Product --</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} | {p.fragrance} ({p.weight}g) - ₹{p.price} [Stock: {p.stock}]
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-xs font-medium">Unit Price (₹)</label>
+                        <Input type="number" readOnly className="bg-gray-100 dark:bg-slate-800" {...register(`items.${index}.price`, { valueAsNumber: true })} />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-xs font-medium">Quantity</label>
+                        <Input type="number" min="1" {...register(`items.${index}.quantity`, { valueAsNumber: true })} />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-xs font-medium">Item Total</label>
+                        <div className="h-10 flex items-center px-3 border rounded-md bg-gray-100 dark:bg-slate-800 dark:border-gray-700 font-bold text-primary text-sm">
+                          ₹{(watchItems[index]?.quantity || 0) * (watchItems[index]?.price || 0)}
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-1 flex justify-end">
+                        <Button type="button" variant="ghost" className="h-10 w-10 p-0 text-red-500 hover:text-red-700" onClick={() => remove(index)} disabled={fields.length === 1}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Stock Alert Warning */}
+                    {currentProd && (
+                      <div className="flex items-center justify-between text-xs pt-1 border-t dark:border-gray-700">
+                        <span className="text-gray-500">
+                          Fragrance: <strong className="text-gray-800 dark:text-gray-200">{currentProd.fragrance}</strong> | Weight: <strong className="text-gray-800 dark:text-gray-200">{currentProd.weight}g</strong>
+                        </span>
+                        {watchItems[index]?.quantity > currentProd.stock ? (
+                          <span className="text-red-600 dark:text-red-400 font-bold flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" /> Exceeds stock! Only {currentProd.stock} items available.
+                          </span>
+                        ) : (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                            {currentProd.stock} in stock
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {errors.items && <p className="text-xs text-red-500">{errors.items.message}</p>}
             </CardContent>
           </Card>
 
+          {/* Step 3: Payment & Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>4. Payment & Verification</CardTitle>
+                <CardTitle className="text-base">3. Payment Information (Online Only)</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Payment Method</label>
+                  <label className="text-sm font-medium">Payment Method *</label>
                   <select className="w-full h-10 px-3 py-2 border rounded-md dark:bg-slate-900 dark:border-gray-700" {...register('paymentMethod')}>
                     <option value="UPI">UPI</option>
                     <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="COD">Cash on Delivery</option>
+                    <option value="Razorpay">Razorpay</option>
+                    <option value="Other Online">Other Online</option>
                   </select>
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Payment Status</label>
+                  <label className="text-sm font-medium">Payment Verification Status *</label>
                   <select className="w-full h-10 px-3 py-2 border rounded-md dark:bg-slate-900 dark:border-gray-700" {...register('paymentStatus')}>
-                    <option value="Pending">Pending</option>
-                    <option value="Verified">Verified</option>
+                    <option value="Pending Payment">Pending Payment</option>
+                    <option value="Payment Verified">Payment Verified (Auto-Confirms Order)</option>
                   </select>
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">UPI Transaction ID</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">UPI / Bank Transaction ID</label>
                   <Input placeholder="e.g. 301234567890" {...register('upiTransactionId')} />
                 </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Screenshot</label>
-                  <div className="border-2 border-dashed dark:border-gray-700 rounded-lg p-4 text-center">
+                  <div className="border-2 border-dashed dark:border-gray-700 rounded-lg p-3 text-center">
                     <input 
                       type="file" 
                       accept="image/*" 
                       id="screenshot" 
                       className="hidden"
-                      onChange={handleImageUpload}
+                      onChange={handleScreenshotUpload}
                     />
                     <label htmlFor="screenshot" className="cursor-pointer flex flex-col items-center text-sm text-gray-500 hover:text-primary">
-                      <UploadCloud className="w-8 h-8 mb-2" />
-                      <span>{watch('paymentScreenshotUrl') ? 'Screenshot Uploaded (Click to change)' : 'Click to Upload Screenshot'}</span>
+                      <UploadCloud className="w-6 h-6 mb-1" />
+                      <span>{watch('paymentScreenshotUrl') ? 'Screenshot Attached (Click to change)' : 'Upload Payment Screenshot'}</span>
                     </label>
                   </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Order Special Notes (Optional)</label>
+                  <Input placeholder="e.g. Urgent Delivery, Handle Carefully, Gift Packing" {...register('orderNotes')} />
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
+                <CardTitle className="text-base">Order Financial Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal</span>
-                  <span className="font-medium">₹{subtotal}</span>
+                  <span className="font-semibold">₹{subtotal.toFixed(2)}</span>
                 </div>
+
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-500">Shipping Charge</span>
-                  <div className="w-24">
-                    <Input type="number" className="h-8 text-right" {...register('shippingCharges', { valueAsNumber: true })} />
+                  <div className="w-28">
+                    <Input type="number" className="h-8 text-right font-semibold" {...register('shippingCharge', { valueAsNumber: true })} />
                   </div>
                 </div>
+
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Discount</span>
-                  <div className="w-24">
-                    <Input type="number" className="h-8 text-right" {...register('discount', { valueAsNumber: true })} />
+                  <span className="text-gray-500">Discount (₹)</span>
+                  <div className="w-28">
+                    <Input type="number" className="h-8 text-right font-semibold text-emerald-600" {...register('discount', { valueAsNumber: true })} />
                   </div>
                 </div>
+
                 <div className="border-t dark:border-gray-700 pt-4 mt-2 flex justify-between items-center">
                   <span className="text-lg font-bold">Grand Total</span>
-                  <span className="text-xl font-bold text-primary flex items-center">
-                    <IndianRupee className="w-5 h-5 mr-1" />
-                    {grandTotal}
+                  <span className="text-2xl font-bold text-primary flex items-center">
+                    <IndianRupee className="w-6 h-6 mr-1" />
+                    {grandTotal.toFixed(2)}
                   </span>
                 </div>
 
-                <Button type="submit" className="w-full mt-4" size="lg" disabled={isSubmitting || !foundCustomer || customerAddresses.length === 0}>
+                <Button type="submit" className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold" size="lg" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                  Confirm Order & Generate ID
+                  Confirm & Generate Order ID
                 </Button>
               </CardContent>
             </Card>
