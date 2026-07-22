@@ -26,12 +26,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-950 transition-colors">
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
       
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          className="fixed inset-0 bg-black/50 z-20 md:hidden animate-in fade-in"
           onClick={() => setSidebarOpen(false)}
         />
       )}
