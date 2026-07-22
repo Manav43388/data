@@ -23,9 +23,9 @@ export const OrderDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Shipping Form States
-  const [courier, setCourier] = useState<CourierCompany | string>('Delhivery');
+  const [courier, setCourier] = useState<CourierCompany | string>('Shree Tirupati Courier');
   const [trackingId, setTrackingId] = useState('');
-  const [trackingUrl, setTrackingUrl] = useState('');
+  const [trackingUrl, setTrackingUrl] = useState('http://www.shreetirupaticourier.net/');
   const [orderStatus, setOrderStatus] = useState('');
   const [shippingStatus, setShippingStatus] = useState('');
   const [savingShipping, setSavingShipping] = useState(false);
@@ -44,7 +44,7 @@ export const OrderDetails: React.FC = () => {
   const packingSlipRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
 
-  const COURIER_OPTIONS = ['Delhivery', 'India Post', 'DTDC', 'Blue Dart', 'Xpressbees', 'Shadowfax', 'Other'];
+  const COURIER_OPTIONS = ['Shree Tirupati Courier', 'Delhivery', 'India Post', 'DTDC', 'Blue Dart', 'Xpressbees', 'Shadowfax', 'Other'];
   const ORDER_STATUS_STEPS = ['Pending Payment', 'Payment Verified', 'Confirmed', 'Packed', 'Shipped', 'Delivered'];
   const SHIPPING_STATUS_OPTIONS = ['Ready to Pack', 'Packed', 'Out for Pickup', 'In Transit', 'Delivered', 'Returned'];
 
@@ -65,9 +65,9 @@ export const OrderDetails: React.FC = () => {
       if (orderSnap.exists()) {
         const ord = { id: orderSnap.id, ...orderSnap.data() } as Order;
         setOrder(ord);
-        setCourier(ord.courierCompany || 'Delhivery');
+        setCourier(ord.courierCompany || 'Shree Tirupati Courier');
         setTrackingId(ord.trackingId || '');
-        setTrackingUrl(ord.trackingUrl || '');
+        setTrackingUrl(ord.trackingUrl || 'http://www.shreetirupaticourier.net/');
         setOrderStatus(ord.orderStatus || 'Pending Payment');
         setShippingStatus(ord.shippingStatus || 'Ready to Pack');
       }
@@ -115,12 +115,14 @@ export const OrderDetails: React.FC = () => {
     if (!id || !order) return;
     setSavingShipping(true);
     try {
-      // Auto build tracking URL if empty
+      // Auto build tracking URL if empty or default
       let finalTrackingUrl = trackingUrl;
-      if (!finalTrackingUrl && trackingId) {
-        if (courier === 'Delhivery') finalTrackingUrl = `https://www.delhivery.com/track/package/${trackingId}`;
+      if (!finalTrackingUrl || courier === 'Shree Tirupati Courier') {
+        if (courier === 'Shree Tirupati Courier') finalTrackingUrl = 'http://www.shreetirupaticourier.net/';
+        else if (courier === 'Delhivery' && trackingId) finalTrackingUrl = `https://www.delhivery.com/track/package/${trackingId}`;
         else if (courier === 'DTDC') finalTrackingUrl = `https://www.dtdc.in/tracking/shipment-tracking.asp`;
         else if (courier === 'India Post') finalTrackingUrl = `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx`;
+        else finalTrackingUrl = 'http://www.shreetirupaticourier.net/';
       }
 
       const updatedTimeline = [...(order.timeline || [])];
@@ -148,6 +150,7 @@ export const OrderDetails: React.FC = () => {
         timeline: updatedTimeline
       } : null);
 
+      setTrackingUrl(finalTrackingUrl);
       showToast('Shipping details saved successfully!');
     } catch (error) {
       console.error("Error updating shipping:", error);
@@ -198,6 +201,10 @@ export const OrderDetails: React.FC = () => {
       return;
     }
 
+    const currentCourier = order.courierCompany || courier || 'Shree Tirupati Courier';
+    const currentTrackingId = order.trackingId || trackingId || 'N/A';
+    const currentTrackingUrl = order.trackingUrl || trackingUrl || 'http://www.shreetirupaticourier.net/';
+
     const message = `Hello ${order.customerName},
 
 Your order from Asmita Gruh Udhyog has been shipped.
@@ -206,10 +213,13 @@ Order ID:
 ${order.orderId}
 
 Courier:
-${order.courierCompany || courier || 'N/A'}
+${currentCourier}
 
 Tracking ID:
-${order.trackingId || trackingId || 'N/A'}
+${currentTrackingId}
+
+Track your parcel here:
+${currentTrackingUrl}
 
 Thank you for shopping with Asmita Gruh Udhyog.`;
 
@@ -527,13 +537,11 @@ Thank you for shopping with Asmita Gruh Udhyog.`;
                 Save Shipping Details
               </Button>
 
-              {trackingUrl && (
-                <a href={trackingUrl} target="_blank" rel="noopener noreferrer" className="block">
-                  <Button variant="outline" className="w-full text-xs font-semibold text-blue-600">
-                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Track Parcel Page
-                  </Button>
-                </a>
-              )}
+              <a href={trackingUrl || order.trackingUrl || 'http://www.shreetirupaticourier.net/'} target="_blank" rel="noopener noreferrer" className="block pt-1">
+                <Button variant="outline" className="w-full font-bold text-blue-600 border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center justify-center gap-2">
+                  <ExternalLink className="w-4 h-4" /> Track Parcel ({courier || 'Shree Tirupati Courier'})
+                </Button>
+              </a>
             </CardContent>
           </Card>
 

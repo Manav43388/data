@@ -67,7 +67,7 @@ export type OrderStatus = 'Pending Payment' | 'Payment Verified' | 'Confirmed' |
 export type ShippingStatus = 'Ready to Pack' | 'Packed' | 'Out for Pickup' | 'In Transit' | 'Delivered' | 'Returned';
 export type PaymentStatus = 'Pending Payment' | 'Payment Verified' | 'Failed' | 'Refunded';
 export type PaymentMethod = 'UPI' | 'Bank Transfer' | 'Razorpay' | 'Other Online';
-export type CourierCompany = 'India Post' | 'DTDC' | 'Delhivery' | 'Blue Dart' | 'Xpressbees' | 'Shadowfax' | 'Other';
+export type CourierCompany = 'Shree Tirupati Courier' | 'Delhivery' | 'India Post' | 'DTDC' | 'Blue Dart' | 'Xpressbees' | 'Shadowfax' | 'Other';
 
 export interface OrderItem {
   productId: string;
