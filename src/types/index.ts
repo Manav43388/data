@@ -63,11 +63,58 @@ export interface Product {
   updatedBy?: string;
 }
 
-export type OrderStatus = 'Pending Payment' | 'Payment Verified' | 'Confirmed' | 'Packed' | 'Shipped' | 'Delivered' | 'Cancelled';
+export interface PackagingChecklist {
+  productsCollected: boolean;
+  quantitiesChecked: boolean;
+  productConditionChecked: boolean;
+  placedInParcel: boolean;
+  freeSampleAdded?: boolean;
+  invoiceAdded: boolean;
+  parcelSealed: boolean;
+  addressLabelAttached: boolean;
+  mobileChecked: boolean;
+  qualityChecked: boolean;
+}
+
+export const DEFAULT_PACKAGING_CHECKLIST: PackagingChecklist = {
+  productsCollected: false,
+  quantitiesChecked: false,
+  productConditionChecked: false,
+  placedInParcel: false,
+  freeSampleAdded: false,
+  invoiceAdded: false,
+  parcelSealed: false,
+  addressLabelAttached: false,
+  mobileChecked: false,
+  qualityChecked: false,
+};
+
+export type FulfilmentStatus = 
+  | 'Order Confirmed'
+  | 'Packaging Pending'
+  | 'Packaging In Progress'
+  | 'Ready to Ship'
+  | 'Shipped'
+  | 'Delivered'
+  | 'Returned'
+  | 'Cancelled';
+
+export type PackagingStatus = 'Not Started' | 'In Progress' | 'Packed';
+
+export type OrderStatus = 
+  | 'Pending Payment' 
+  | 'Payment Verified' 
+  | 'Confirmed' 
+  | 'Packing'
+  | 'Ready To Ship'
+  | 'Shipment Process'
+  | 'Delivered'
+  | 'Cancelled';
+
 export type ShippingStatus = 'Ready to Pack' | 'Packed' | 'Out for Pickup' | 'In Transit' | 'Delivered' | 'Returned';
-export type PaymentStatus = 'Pending Payment' | 'Payment Verified' | 'Failed' | 'Refunded';
+export type PaymentStatus = 'Pending' | 'Received' | 'Verified' | 'Failed' | 'Refunded' | 'Pending Payment' | 'Payment Verified';
 export type PaymentMethod = 'UPI' | 'Bank Transfer' | 'Razorpay' | 'Other Online';
-export type CourierCompany = 'Shree Tirupati Courier' | 'Delhivery' | 'India Post' | 'DTDC' | 'Blue Dart' | 'Xpressbees' | 'Shadowfax' | 'Other';
+export type CourierCompany = 'Shree Tirupati Courier' | 'India Post' | 'DTDC' | 'Delhivery' | 'Blue Dart' | 'Xpressbees' | 'Shadowfax' | 'Other';
 
 export interface OrderItem {
   productId: string;
@@ -117,13 +164,28 @@ export interface Order {
   paymentMethod: PaymentMethod | string;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
+  fulfilmentStatus?: FulfilmentStatus;
+  packagingStatus?: PackagingStatus;
   shippingStatus?: ShippingStatus;
   orderDate: Date | any;
+  orderDateKey?: string; // e.g. "2026-07-25" (in Asia/Kolkata)
+  displayDate?: string; // e.g. "25-07-2026"
   orderNotes?: string;
+  packagingNotes?: string;
+  shippingNotes?: string;
   notes?: string;
+  
+  // Internal Packing Checklist
+  packagingChecklist?: PackagingChecklist;
+  packingChecklist?: PackagingChecklist; // backwards compatibility
+  packagingStartedAt?: Date | any;
+  packagingCompletedAt?: Date | any;
+  packedBy?: string;
+  packedAt?: Date | any;
   
   // Payment Details
   upiTransactionId?: string;
+  transactionId?: string;
   paymentScreenshotUrl?: string;
   
   // Shipping Details
@@ -131,8 +193,18 @@ export interface Order {
   trackingId?: string;
   trackingUrl?: string;
   shippingDate?: Date | any;
+  shippedAt?: Date | any;
   expectedDeliveryDate?: Date | any;
+  
+  // WhatsApp Tracking status
+  whatsappOpenedAt?: Date | any;
+  whatsappTrackingSent?: boolean;
+  whatsappTrackingSentAt?: Date | any;
+  
+  // Delivery Details
   deliveredDate?: Date | any;
+  deliveredAt?: Date | any;
+  deliveryTime?: string;
   
   // Audit & Workflow
   timeline?: OrderTimelineStep[];

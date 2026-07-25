@@ -11,14 +11,29 @@ import {
 import { db } from '../config/firebase';
 import type { StoreSettings } from '../types';
 
+import { getKolkataTodayKey, formatKolkataDate } from '../utils/dateUtils';
+
 // Generic CRUD functions with Soft Delete support
 export const addDocument = async (collectionName: string, data: any) => {
   const colRef = collection(db, collectionName);
-  const docRef = await addDoc(colRef, {
-    ...data,
+  const extraFields: any = {
     isDeleted: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
+  };
+
+  if (collectionName === 'orders') {
+    if (!data.orderDateKey) {
+      extraFields.orderDateKey = getKolkataTodayKey();
+    }
+    if (!data.displayDate) {
+      extraFields.displayDate = formatKolkataDate(new Date());
+    }
+  }
+
+  const docRef = await addDoc(colRef, {
+    ...data,
+    ...extraFields
   });
   return docRef.id;
 };
@@ -195,6 +210,47 @@ export const saveStoreSettings = async (settings: Partial<StoreSettings>) => {
   }
 };
 
+// Courier Tracking URL Generator
+export const getDefaultTrackingUrl = (courierCompany: string, trackingId: string): string => {
+  if (!trackingId) return '';
+  const cleanId = trackingId.trim();
+  switch (courierCompany) {
+    case 'Delhivery':
+      return `https://www.delhivery.com/track/package/${cleanId}`;
+    case 'Shree Tirupati Courier':
+      return `https://www.shreetirupaticourier.com/`;
+    case 'DTDC':
+      return `https://www.dtdc.in/tracking/tracking_results.asp?TknNo=${cleanId}`;
+    case 'Blue Dart':
+      return `https://www.bluedart.com/tracking?trackNo=${cleanId}`;
+    case 'India Post':
+      return `https://www.indiapost.gov.in/`;
+    case 'Xpressbees':
+      return `https://www.xpressbees.com/track-shipment?isAwb=true&trackid=${cleanId}`;
+    case 'Shadowfax':
+      return `https://www.shadowfax.in/track?tracking_id=${cleanId}`;
+    default:
+      return `https://www.google.com/search?q=${encodeURIComponent(courierCompany + ' tracking ' + cleanId)}`;
+  }
+};
+
+// WhatsApp Message Generator
+export const generateWhatsAppMessage = (order: {
+  customerName: string;
+  orderId: string;
+  courierCompany?: string;
+  trackingId?: string;
+  trackingUrl?: string;
+}): string => {
+  return `Hello ${order.customerName},\n\nYour order from Asmita Gruh Udhyog has been shipped.\n\nOrder ID:\n${order.orderId}\n\nCourier:\n${order.courierCompany || 'Courier Service'}\n\nTracking ID:\n${order.trackingId || 'N/A'}\n\nTrack your parcel:\n${order.trackingUrl || 'N/A'}\n\nThank you for shopping with Asmita Gruh Udhyog.`;
+};
+
+export const generateWhatsAppLink = (phone: string, message: string): string => {
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+  return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+};
+
 // Backup Export Helper
 export const exportAllData = async () => {
   const [customers, products, orders, settings] = await Promise.all([
@@ -213,3 +269,4 @@ export const exportAllData = async () => {
     settings
   };
 };
+

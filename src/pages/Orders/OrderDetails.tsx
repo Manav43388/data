@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { updateDocument, deductProductStock, getStoreSettings } from '../../services/db';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import type { Order, StoreSettings, CourierCompany } from '../../types';
+import type { Order, StoreSettings, CourierCompany, OrderStatus } from '../../types';
 import { useToast } from '../../contexts/ToastContext';
 
 export const OrderDetails: React.FC = () => {
@@ -45,7 +45,7 @@ export const OrderDetails: React.FC = () => {
   const labelRef = useRef<HTMLDivElement>(null);
 
   const COURIER_OPTIONS = ['Shree Tirupati Courier', 'Delhivery', 'India Post', 'DTDC', 'Blue Dart', 'Xpressbees', 'Shadowfax', 'Other'];
-  const ORDER_STATUS_STEPS = ['Pending Payment', 'Payment Verified', 'Confirmed', 'Packed', 'Shipped', 'Delivered'];
+  const ORDER_STATUS_STEPS: OrderStatus[] = ['Pending Payment', 'Payment Verified', 'Packing', 'Ready To Ship', 'Shipment Process', 'Delivered'];
   const SHIPPING_STATUS_OPTIONS = ['Ready to Pack', 'Packed', 'Out for Pickup', 'In Transit', 'Delivered', 'Returned'];
 
   useEffect(() => {
@@ -86,23 +86,23 @@ export const OrderDetails: React.FC = () => {
       const newTimeline = [
         ...(order.timeline || []),
         { status: 'Payment Verified', timestamp: new Date() },
-        { status: 'Confirmed', timestamp: new Date() }
+        { status: 'Packing', timestamp: new Date(), note: 'Payment verified. Moved to Packing.' }
       ];
 
       // Auto-deduct stock on confirmation if not already deducted
-      if (order.orderStatus !== 'Confirmed' && order.orderStatus !== 'Packed' && order.orderStatus !== 'Shipped' && order.orderStatus !== 'Delivered') {
+      if (order.orderStatus === 'Pending Payment') {
         await deductProductStock(order.items);
       }
 
       await updateDocument('orders', id, {
         paymentStatus: 'Payment Verified',
-        orderStatus: 'Confirmed',
+        orderStatus: 'Packing',
         timeline: newTimeline
       });
 
-      setOrder(prev => prev ? { ...prev, paymentStatus: 'Payment Verified', orderStatus: 'Confirmed', timeline: newTimeline } : null);
-      setOrderStatus('Confirmed');
-      showToast('Payment verified & order confirmed! Product stock updated.');
+      setOrder(prev => prev ? { ...prev, paymentStatus: 'Payment Verified', orderStatus: 'Packing', timeline: newTimeline } : null);
+      setOrderStatus('Packing');
+      showToast('Payment verified! Order moved to Packing & stock updated.');
     } catch (error) {
       console.error("Error verifying payment:", error);
       showToast('Failed to verify payment', 'error');
@@ -262,7 +262,7 @@ Thank you for shopping with Asmita Gruh Udhyog.`;
   if (loading) return <div className="p-12 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></div>;
   if (!order) return <div className="p-12 text-center text-red-500 font-bold">Order not found</div>;
 
-  const currentStatusIndex = ORDER_STATUS_STEPS.indexOf(orderStatus);
+  const currentStatusIndex = ORDER_STATUS_STEPS.indexOf(orderStatus as OrderStatus);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -290,13 +290,40 @@ Thank you for shopping with Asmita Gruh Udhyog.`;
 
         {/* Action Printable Buttons */}
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <Button variant="outline" size="sm" onClick={() => handlePrint(invoiceRef, `Invoice_${order.orderId}`)}>
+          {/* STAGE-SPECIFIC QUICK WORKFLOW ACTION BUTTON */}
+          {order.fulfilmentStatus === 'Order Confirmed' && (
+            <Button size="sm" onClick={() => navigate('/packaging')} className="bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs">
+              Send to Packaging ➔
+            </Button>
+          )}
+          {order.fulfilmentStatus === 'Packaging Pending' && (
+            <Button size="sm" onClick={() => navigate('/packaging')} className="bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs">
+              Start Packaging ➔
+            </Button>
+          )}
+          {order.fulfilmentStatus === 'Packaging In Progress' && (
+            <Button size="sm" onClick={() => navigate('/packaging')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs">
+              Mark as Packed ✅ ➔
+            </Button>
+          )}
+          {order.fulfilmentStatus === 'Ready to Ship' && (
+            <Button size="sm" onClick={() => navigate('/ready-to-ship')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs">
+              Add Shipping Details ➔
+            </Button>
+          )}
+          {order.fulfilmentStatus === 'Shipped' && (
+            <Button size="sm" onClick={() => handleSendWhatsApp()} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs">
+              Send WhatsApp Tracking ➔
+            </Button>
+          )}
+
+          <Button variant="outline" size="sm" onClick={() => handlePrint(invoiceRef, `Invoice_${order.orderId}`)} className="rounded-xl text-xs font-bold">
             <Printer className="w-4 h-4 mr-1.5" /> A4 Invoice
           </Button>
-          <Button variant="outline" size="sm" onClick={() => handlePrint(packingSlipRef, `PackingSlip_${order.orderId}`)}>
+          <Button variant="outline" size="sm" onClick={() => handlePrint(packingSlipRef, `PackingSlip_${order.orderId}`)} className="rounded-xl text-xs font-bold">
             <Package className="w-4 h-4 mr-1.5" /> Packing Slip
           </Button>
-          <Button variant="outline" size="sm" onClick={() => handlePrint(labelRef, `ShippingLabel_${order.orderId}`)}>
+          <Button variant="outline" size="sm" onClick={() => handlePrint(labelRef, `ShippingLabel_${order.orderId}`)} className="rounded-xl text-xs font-bold">
             <TagIcon className="w-4 h-4 mr-1.5" /> 4x6 Label
           </Button>
         </div>
@@ -308,6 +335,115 @@ Thank you for shopping with Asmita Gruh Udhyog.`;
         {/* Left Column: Order Items & Timeline */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* INTERNAL PACKING CHECKLIST CARD (STEP 2) */}
+          <Card className="border-2 border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-black text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-amber-600" />
+                  Internal Warehouse Packing Checklist (Step 2)
+                </CardTitle>
+                {order.orderStatus === 'Ready To Ship' || order.orderStatus === 'Shipment Process' || order.orderStatus === 'Delivered' ? (
+                  <span className="bg-emerald-600 text-white text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 shadow-xs">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    PACKED ✅
+                  </span>
+                ) : (
+                  <span className="text-[11px] bg-amber-100 text-amber-800 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-300">
+                    Internal Only
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Complete all 8 checklist items to automatically mark parcel as <strong>PACKED ✅</strong> and move it to <strong>Ready To Ship</strong>.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {[
+                  { key: 'paymentVerified', label: 'Payment Verified' },
+                  { key: 'productsCollected', label: 'Products Collected' },
+                  { key: 'productsPacked', label: 'Products Packed' },
+                  { key: 'invoicePrinted', label: 'Invoice Printed' },
+                  { key: 'shippingLabelPrinted', label: 'Shipping Label Printed' },
+                  { key: 'parcelSealed', label: 'Parcel Sealed' },
+                  { key: 'qualityChecked', label: 'Quality Checked' },
+                  { key: 'readyForShipping', label: 'Ready For Shipping' },
+                ].map((item) => {
+                  const checklist = order.packingChecklist || {
+                    paymentVerified: order.paymentStatus === 'Payment Verified',
+                    productsCollected: false,
+                    productsPacked: false,
+                    invoicePrinted: false,
+                    shippingLabelPrinted: false,
+                    parcelSealed: false,
+                    qualityChecked: false,
+                    readyForShipping: false,
+                  };
+                  const isChecked = Boolean((checklist as any)[item.key]);
+
+                  return (
+                    <label
+                      key={item.key}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none text-xs font-bold ${
+                        isChecked
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500/40 text-emerald-900 dark:text-emerald-300'
+                          : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-amber-400'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={async (e) => {
+                          const updatedChecklist = {
+                            ...checklist,
+                            [item.key]: e.target.checked,
+                          };
+
+                          const allChecked = Object.values(updatedChecklist).every(Boolean);
+
+                          const updates: any = {
+                            packingChecklist: updatedChecklist,
+                          };
+
+                          if (allChecked) {
+                            updates.orderStatus = 'Ready To Ship';
+                            updates.packedAt = new Date();
+                            updates.timeline = [
+                              ...(order.timeline || []),
+                              { status: 'Ready To Ship', timestamp: new Date(), note: 'Internal packing checklist completed. Ready for courier pickup.' }
+                            ];
+                          }
+
+                          await updateDocument('orders', order.id!, updates);
+                          
+                          setOrder((prev) => prev ? {
+                            ...prev,
+                            ...updates
+                          } : null);
+
+                          if (allChecked) {
+                            setOrderStatus('Ready To Ship');
+                            showToast('Order PACKED ✅ and automatically moved to Ready To Ship!', 'success');
+                          }
+                        }}
+                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {order.packedAt && (
+                <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold pt-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" /> Packing timestamp recorded: {new Date(order.packedAt.seconds ? order.packedAt.seconds * 1000 : order.packedAt).toLocaleString('en-IN')}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Order Timeline Visual Stepper */}
           <Card>
             <CardHeader className="pb-2">

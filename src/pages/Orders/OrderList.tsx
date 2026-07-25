@@ -18,7 +18,7 @@ export const OrderList: React.FC = () => {
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('All');
   const [showTrash, setShowTrash] = useState(false);
 
-  const STATUS_TABS = ['All', 'Pending Payment', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
+  const STATUS_TABS = ['All', 'Pending Payment', 'Payment Verified', 'Packing', 'Ready To Ship', 'Shipment Process', 'Delivered', 'Cancelled'];
 
   useEffect(() => {
     fetchOrders();
@@ -236,9 +236,10 @@ export const OrderList: React.FC = () => {
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                           order.orderStatus === 'Delivered' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30' :
-                          order.orderStatus === 'Shipped' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30' :
-                          order.orderStatus === 'Confirmed' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30' :
-                          'bg-amber-100 text-amber-800 dark:bg-amber-900/30'
+                          order.orderStatus === 'Shipment Process' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30' :
+                          order.orderStatus === 'Ready To Ship' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30' :
+                          order.orderStatus === 'Packing' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30' :
+                          'bg-gray-100 text-gray-800 dark:bg-slate-800'
                         }`}>
                           {order.orderStatus}
                         </span>
